@@ -42,8 +42,8 @@ All other URLs are obtained from the api responses themselves (think of your api
 As an example, we'll connect to the haltalk api.
 
 ```python
->>> from restnavigator import HALNavigator
->>> N = HALNavigator('http://haltalk.herokuapp.com/', apiname="haltalk")
+>>> from restnavigator import Navigator
+>>> N = Navigator.hal('http://haltalk.herokuapp.com/', apiname="haltalk")
 >>> N
 HALNavigator(haltalk)
 ```
@@ -54,12 +54,11 @@ Usually, with the index (normally at the api root), you're most interested in th
 Let's look at those:
 
 ```python
->>> N.links
-{'ht:users': [HALNavigator(haltalk.users)],
- 'ht:signup': [HALNavigator(haltalk.signup)],
- 'ht:me': [HALNavigator(haltalk.users.{name})],
- 'ht:latest-posts': [HALNavigator(haltalk.posts.latest)]
-}
+>>> N.links()
+{u'ht:users': HALNavigator(haltalk.users),
+ u'ht:signup': HALNavigator(haltalk.signup),
+ u'ht:me': TemplatedThunk(haltalk.users.{name}),
+ u'ht:latest-posts': HALNavigator(haltalk.posts.latest)}
 ```
 
 (This may take a moment because asking for the links causes the HALNavigator to actually request the resource from the server).
@@ -143,43 +142,45 @@ You can squelch this exception and just have the post call return a `HALNavigato
 ...    'real_name': 'Fred Wilson'
 ... }, raise_exc=False)
 >>> dup_signup
-ErrorNavigator(haltalk.signup)  # 400!
+OrphanHALNavigator(haltalk.signup)  # 400!
 >>> dup_signup.status
 (400, 'Bad Request')
 >>> dup_signup.state
-{"errors": {"username": ["is already taken"]}}
+{u"errors": {u"username": [u"is already taken"]}}
 ```
 
 ### Templated links
 
 Now that we've signed up, lets take a look at our profile.
-The link for a user's profile is a templated link, which we can tell because its repr has `{}` in it.
-You can also tell by the `.parameters` attribute:
+The link for a user's profile is a templated link, which restnavigator represents as a `PartialNavigator`.
+Similar to python's [functools.partial][], a `PartialNavigator` is an object that needs a few more arguments to give you a full navigator back.
+Despite its name, it can't talk to the network by itself.
+Its job is to to generate new navigators for you.
+You can see what variables it has by looking at its `.variables` attribute (its `__repr__` hints at this as well):
+
+[functools.partial]: https://docs.python.org/2/library/functools.html#functools.partial
 
 ```python
 >>> N.links.keys()
 ['ht:latest-posts', 'ht:me', 'ht:users', 'ht:signup']
 >>> N['ht:me']
 HALNavigator(haltalk.users.{name})
->>> N['ht:me'].parameters
+>>> N['ht:me'].variables
 set(['name'])
 ```
 
-The documentation for the `ht:me` rel type should tell us how the name parameteris supposed to work, but in this case it's fairly obvious (plug in the username).
-There are two ways you can input template parameters.
-Both are equivalent, but people may prefer one over the other for aesthetic reasons:
+The documentation for the `ht:me` rel type should tell us how the name parameter is supposed to work, but in this case it's fairly obvious (plug in the username).
+Two provide the template parameters, just call it with keyword args:
 
 ```python
->>> N['ht:me'].template_uri
+>>> template = N['ht:me']
+>>> template.uri
 'http://haltalk.herokuapp.com/users/{name}'
->>> Fred1 = N['ht:me', 'name':'fred23']
->>> Fred1
+>>> Fred = template(name='fred23')
+>>> Fred
 HALNavigator('haltalk.users.fred23')
->>> Fred2 = N['ht:me'].expand(name='fred23')  # equivalent to Fred1
->>> Fred2()
-{'bio': None, 'real_name': 'Fred Wilson', 'username': 'fred23'}
->>> Fred1 is Fred2  # HALNavigator keeps an identity cache of resources
-True
+>>> Fred()
+{u'bio': None, u'real_name': u'Fred Wilson', u'username': u'fred23'}
 ```
 
 ### Authentication

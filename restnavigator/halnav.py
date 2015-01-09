@@ -100,7 +100,7 @@ class Link(object):
         return self.uri.replace(root, '/')
 
 
-class TemplatedThunk(object):
+class PartialNavigator(object):
     '''A lazy representation of a navigator. Expands to a full
     navigator when template arguments are given by calling it.
     '''
@@ -108,6 +108,15 @@ class TemplatedThunk(object):
     def __init__(self, link, core=None):
         self.link = link
         self._core = core
+
+    def __repr__(self):  # pragma: nocover
+        relative_uri = self.link.relative_uri(self._core.root)
+        objectified_uri = utils.objectify_uri(relative_uri)
+        return "{cls}({name}{path})".format(
+            cls=type(self).__name__,
+            name=self._core.apiname,
+            path=objectified_uri
+        )
 
     @property
     def variables(self):
@@ -136,7 +145,7 @@ class TemplatedThunk(object):
         return self.link.uri
 
     def __call__(self, **kwargs):
-        '''Expands the current TemplatedThunk into a new
+        '''Expands the current PartialNavigator into a new
         navigator. Keyword traversal are supplied to the uri template.
         '''
         return HALNavigator(
@@ -347,7 +356,7 @@ class HALNavigatorBase(object):
         If the link is relative, the returned navigator will have a
         uri that relative to this navigator's uri.
 
-        If the link passed in is templated, a TemplatedThunk will be
+        If the link passed in is templated, a PartialNavigator will be
         returned instead.
         '''
         # resolve relative uris against the current uri
@@ -355,13 +364,13 @@ class HALNavigatorBase(object):
         link_obj = Link(uri=uri, properties=link)
         if link.get('templated'):
             # Can expand into a real HALNavigator
-            return TemplatedThunk(link_obj, core=self._core)
+            return PartialNavigator(link_obj, core=self._core)
         else:
             return HALNavigator(link_obj, core=self._core)
 
     def _can_parse(self, content_type):
         '''Whether this navigator can parse the given content-type'''
-        return content_type == self.DEFAULT_CONTENT_TYPE
+        return 'json' in content_type
 
     def _parse_content(self, text):
         '''Parses the content of a response body into the correct
